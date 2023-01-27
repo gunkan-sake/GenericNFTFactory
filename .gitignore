@@ -1,0 +1,15 @@
+node_modules
+.pytest_cache
+artifacts
+assets
+build
+cache
+interfaces
+reports
+*__pycache*
+scripts
+*.code-workspace
+brownie-config.yaml
+*.sh
+.env
+.DS_Store
