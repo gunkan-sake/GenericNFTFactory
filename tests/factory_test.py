@@ -32,7 +32,8 @@ def test_deploy():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
     
     expected_owner = factory_owner
@@ -62,7 +63,8 @@ def test_add_to_whitelist():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     whitelisted = get_account(index=3)
@@ -96,7 +98,8 @@ def test_remove_from_whitelist():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     whitelisted_1 = get_account(index=3)
@@ -136,7 +139,8 @@ def test_set_fee():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     assert MINTING_FEE == factory.fee()
@@ -164,7 +168,8 @@ def test_set_deposit_token():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     assert factory.depositToken() == mock_usdt
@@ -195,7 +200,8 @@ def test_deposit():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     factory_user = get_account(index=3)
@@ -238,7 +244,8 @@ def test_withdraw():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     factory_user = get_account(index=3)
@@ -298,7 +305,8 @@ def test_mint_nft():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     admission_fee = factory.admissionFee({'from': nft_user})
@@ -372,7 +380,8 @@ def test_changeTokenURI():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     admission_fee = factory.admissionFee({'from': nft_user})
@@ -446,7 +455,8 @@ def test_deleteNFT():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     admission_fee = factory.admissionFee({'from': nft_user})
@@ -523,7 +533,8 @@ def test_apply_to_whitelist():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     initial_balance = mock_usdt.balanceOf(factory.address)
@@ -589,7 +600,8 @@ def test_claim_ownership():
         ADMISSION_FEE,
         MINTING_FEE,
         EDITING_FEE,
-        mock_usdt.address
+        mock_usdt.address,
+        force=True
     )
 
     initial_balance = mock_usdt.balanceOf(factory.address)
@@ -663,4 +675,101 @@ def test_claim_ownership():
 
     admitted = factory.checkWhitelistAdmission.call({"from": factory_user})
     assert not admitted
+
+
+def test_set_get_latest_version():
+    """
+    Testing that the owner can set a different latest version
+    and that any user can check the latest version
+    """
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only in local environment")
+
+    factory_user = get_account(index=1)
+    mock_usdt, _, _ = deploy_mocks(account=factory_user)
+
+    factory_owner = get_account(index=2)
+
+    old_factory = deploy_generic_factory(
+        factory_owner,
+        ADMISSION_FEE,
+        MINTING_FEE,
+        EDITING_FEE,
+        mock_usdt.address,
+        force=True
+    )
+
+    new_factory = deploy_generic_factory(
+        factory_owner,
+        ADMISSION_FEE,
+        MINTING_FEE,
+        EDITING_FEE,
+        mock_usdt.address,
+        force=True
+    )
+
+    old_factory.setLatestVersion(new_factory.address, {"from": factory_owner})
+
+    assert old_factory.getLatestVersion.call({"from": factory_user}) == new_factory.address
+
+
+def test_admit_to_whitelist():
+    """
+    Testing that the owner can manually admit users and contracts
+    """
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only in local environment")
+
+    factory_user = get_account(index=1)
+    mock_usdt, _, mock_nft = deploy_mocks(account=factory_user)
+    _, _, mock_nft2 = deploy_mocks(account=factory_user)
+
+    factory_owner = get_account(index=2)
+
+    factory = deploy_generic_factory(
+        factory_owner,
+        ADMISSION_FEE,
+        MINTING_FEE,
+        EDITING_FEE,
+        mock_usdt.address,
+        force=True
+    )
+
+    factory.admitToWhitelist(
+        factory_user,
+        mock_nft,
+        {"from": factory_owner}
+    )
+
+    assert factory.getContractsOfUser.call(factory_user, {"from": factory_owner}) == 1
+
+    admitted = factory.checkWhitelistAdmission.call({"from": factory_user})
+    assert admitted
+
+    owner_mock_nft = mock_nft.owner.call()
+    assert owner_mock_nft == factory_user
+
+    tx = mock_nft.transferOwnership(factory.address, {'from': factory_user})
+    tx.wait(1)
+
+    owner_mock_nft = mock_nft.owner.call()
+    assert owner_mock_nft == factory.address
+
+    fee = factory.fee({'from': factory_user})
+
+    # Approve spending
+    tx = mock_usdt.approve(factory.address, fee, {"from": factory_user})
+    tx.wait(1)
+
+    # Mint
+    test_uri = TEST_URI
+    tx = factory.mintNFTFromAddress(
+        factory_user.address,
+        mock_nft.address,
+        test_uri,
+        fee, 
+        {"from": factory_user})
+    tx.wait(1)
+
+
 

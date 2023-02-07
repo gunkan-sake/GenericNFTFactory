@@ -21,6 +21,7 @@ contract GenericNFTFactory is Ownable {
     uint256 public admissionFee;
     uint256 public editingFee;
     address[] private whitelist;
+    address public latestAddress;
 
     // Associates each NFT contrac address to its user
     mapping(address => address) private nftContractToUser;
@@ -80,6 +81,46 @@ contract GenericNFTFactory is Ownable {
     * Whitelist management
     */
 
+    /**
+    * Retrieves the address of the latest factory deployed.
+    * Should be used by factory users to make sure they are using the latest version.
+    */
+    function getLatestVersion() public returns (address) {
+        return latestAddress;
+    }
+
+    /**
+    * Allows the factory owner to set the lates factory address
+    */
+    function setLatestVersion(address _latestAddress) public onlyOwner {
+        latestAddress = _latestAddress;
+    }
+
+    /**
+    * Internal function to use for adding owners and contracts to the mappings
+    * nftContractAddressOwner -> The of the onwer of the GenericNFT contract address
+    * nftContractAddress -> The GenericNFT contract address that the user wants to mint
+    */
+    function _admitToWhitelist(address nftContractAddressOwner, address nftContractAddress) internal {
+        nftContractToUser[nftContractAddress] = nftContractAddressOwner;
+        contractNumberOfUsers[nftContractAddressOwner] += 1;
+
+        bool alreadyInWhitelist = checkWhitelistAdmission();
+        if(!alreadyInWhitelist){
+            whitelist.push(nftContractAddressOwner);
+        }
+    }
+
+    /**
+    * Allows the owner to admit addesses and contracts manually.
+    * Used for adding users from older factories
+    * nftContractAddressOwner -> The of the onwer of the GenericNFT contract address
+    * nftContractAddress -> The GenericNFT contract address that the user wants to mint
+    */
+    function admitToWhitelist(address nftContractAddressOwner, address nftContractAddress) public onlyOwner {
+        _admitToWhitelist(nftContractAddressOwner, nftContractAddress);
+    }
+
     /** 
     * Allows users to become part of the whitelist
     * nftContractAddress -> The GenericNFT contract address that the user wants to mint
@@ -88,15 +129,8 @@ contract GenericNFTFactory is Ownable {
     function applyToWhitelist(address nftContractAddress, uint256 _admissionFee) public payable {
 
         deposit(_admissionFee);  
-
-        nftContractToUser[nftContractAddress] = msg.sender;
-        contractNumberOfUsers[msg.sender] += 1;
-
-        bool alreadyInWhitelist = checkWhitelistAdmission();
-        if(!alreadyInWhitelist){
-            whitelist.push(msg.sender);
-        }
- 
+        address nftContractAddressOwner = msg.sender;
+        _admitToWhitelist(nftContractAddressOwner, nftContractAddress);
     }
 
     /**
@@ -316,6 +350,32 @@ contract GenericNFTFactory is Ownable {
         nftContract.lock();
 
         return tokenId;
+    }
+
+    /**
+    * Allows users to lock their NFT contract in order to prevent unwanted transfers
+    * nftContractAddress -> The address to be used for the NFT contract
+    */
+    function lockContract(address nftContractAddress) public onlyWhitelist returns (bool) {
+        require(nftContractToUser[nftContractAddress] == msg.sender, "Only the same user who applied for the contract can lock its NFT contract.");
+
+        GenericNFT nftContract = GenericNFT(nftContractAddress);
+        nftContract.lock();
+
+        return nftContract.locked();
+    }
+
+    /**
+    * Allows users to unlock their NFT contract in order to allow for transfers
+    * nftContractAddress -> The address to be used for the NFT contract
+    */
+    function unlockContract(address nftContractAddress) public onlyWhitelist returns (bool) {
+        require(nftContractToUser[nftContractAddress] == msg.sender, "Only the same user who applied for the contract can unlock its NFT contract.");
+
+        GenericNFT nftContract = GenericNFT(nftContractAddress);
+        nftContract.unlock();
+
+        return nftContract.locked();
     }
 
     
